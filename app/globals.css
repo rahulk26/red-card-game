@@ -367,6 +367,25 @@ button:focus-visible {
   display: grid;
   gap: 7px;
   min-width: 0;
+  position: relative;
+}
+
+.slot-swapped .card-face {
+  outline: 3px solid #f2b84b;
+  box-shadow: 0 0 0 5px rgba(242, 184, 75, 0.18), 0 10px 22px rgba(36, 27, 24, 0.14);
+}
+
+.swap-marker {
+  min-height: 30px;
+  display: grid;
+  place-items: center;
+  color: #241b18;
+  background: #ffe2a3;
+  border: 1px solid #f2b84b;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-align: center;
 }
 
 .card-button,
@@ -487,6 +506,11 @@ button:focus-visible {
 
 .power-panel {
   background: #fff4c8;
+}
+
+.reveal-panel {
+  background: #fffaf2;
+  border-color: #f2b84b;
 }
 
 .score-list {

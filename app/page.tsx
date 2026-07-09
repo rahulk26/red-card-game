@@ -54,6 +54,13 @@ type CardRef = {
   slotId: string;
 };
 
+type PeekReveal = {
+  actorId: string;
+  ref: CardRef;
+  card: Card;
+  after: "endTurn" | "power9Swap";
+};
+
 type GameState = {
   phase: "setup" | "initialPeek" | "playing" | "roundOver" | "matchOver";
   players: Player[];
@@ -68,6 +75,8 @@ type GameState = {
   knowledge: Record<string, string[]>;
   peekIndex: number;
   pendingPower: PowerState;
+  peekReveal: PeekReveal | null;
+  lastSwap: CardRef | null;
   redCallerId: string | null;
   finalTurnsRemaining: string[];
   log: string[];
@@ -150,6 +159,8 @@ function createRound(players: Player[], mode: "single" | "match", totalRounds: n
     knowledge,
     peekIndex: 0,
     pendingPower: null,
+    peekReveal: null,
+    lastSwap: null,
     redCallerId: null,
     finalTurnsRemaining: [],
     log: [`Round ${roundNumber} started. ${cardLabel(firstDiscard)} opens the discard pile.`],
@@ -202,6 +213,7 @@ function nextTurn(state: GameState) {
     viewerId: players[nextIndex].id,
     held: null,
     pendingPower: null,
+    peekReveal: null,
     log: [`${players[nextIndex].name}'s turn.`, ...state.log],
   };
 }
@@ -221,6 +233,7 @@ function finishRound(state: GameState) {
     phase: matchDone ? "matchOver" : "roundOver",
     held: null,
     pendingPower: null,
+    peekReveal: null,
     log: [`Round ${state.roundNumber} complete. Lowest round score: ${winners}.`, ...state.log],
   };
 }
@@ -268,6 +281,7 @@ export default function Home() {
   const viewer = game?.players.find((player) => player.id === game.viewerId);
   const topDiscard = game?.discard[game.discard.length - 1] ?? null;
   const canSeeHeldCard = !roomCode || assignedPlayerId === currentPlayer?.id;
+  const canSeePeekReveal = !!game?.peekReveal && (!roomCode || assignedPlayerId === game.peekReveal.actorId);
   const matchLeader = useMemo(() => {
     if (!game) return null;
     const low = Math.min(...game.players.map((player) => player.matchScore));
@@ -475,6 +489,7 @@ export default function Home() {
         players,
         discard: [...game.discard, slot.card],
         held: null,
+        lastSwap: ref,
         log: [`${currentPlayer.name} swapped into their grid and discarded ${cardLabel(slot.card)}.`, ...game.log],
       },
       currentPlayer.id,
@@ -507,14 +522,17 @@ export default function Home() {
 
   function selectPowerCard(ref: CardRef) {
     if (!game || !game.pendingPower) return;
+    if (game.peekReveal) return;
     if (roomCode && assignedPlayerId !== game.pendingPower.actorId) return;
     const { slot } = findSlot(game.players, ref);
     if (!slot) return;
     const actor = game.pendingPower.actorId;
 
     if (game.pendingPower.kind === "peek") {
-      const next = addKnowledge(game, actor, slot.card);
-      commitGame(nextTurn({ ...next, log: [`Power 7: ${playerName(game, actor)} peeked at one card.`, ...next.log] }));
+      commitGame({
+        ...game,
+        peekReveal: { actorId: actor, ref, card: slot.card, after: "endTurn" },
+      });
       return;
     }
 
@@ -529,11 +547,9 @@ export default function Home() {
     }
 
     if (game.pendingPower.kind === "peekThenSwap" && game.pendingPower.step === "peek") {
-      const next = addKnowledge(game, actor, slot.card);
       commitGame({
-        ...next,
-        pendingPower: { kind: "peekThenSwap", actorId: actor, step: "swap", selected: [] },
-        log: [`Power 9: ${playerName(game, actor)} peeked. Now choose two cards to swap.`, ...next.log],
+        ...game,
+        peekReveal: { actorId: actor, ref, card: slot.card, after: "power9Swap" },
       });
       return;
     }
@@ -546,6 +562,29 @@ export default function Home() {
       }
       commitGame(nextTurn(swapBoardCards({ ...game, pendingPower: null }, selected[0], selected[1], "Power 9: two cards were swapped.")));
     }
+  }
+
+  function flipPeekBack() {
+    if (!game?.peekReveal) return;
+    if (roomCode && assignedPlayerId !== game.peekReveal.actorId) return;
+    const actor = game.peekReveal.actorId;
+    if (game.peekReveal.after === "power9Swap") {
+      commitGame({
+        ...game,
+        peekReveal: null,
+        pendingPower: { kind: "peekThenSwap", actorId: actor, step: "swap", selected: [] },
+        log: [`Power 9: ${playerName(game, actor)} peeked. Now choose two cards to swap.`, ...game.log],
+      });
+      return;
+    }
+    commitGame(
+      nextTurn({
+        ...game,
+        peekReveal: null,
+        pendingPower: null,
+        log: [`Power 7: ${playerName(game, actor)} peeked at one card.`, ...game.log],
+      }),
+    );
   }
 
   function stackCard(ref: CardRef) {
@@ -802,7 +841,21 @@ export default function Home() {
             <div className="held-panel power-panel">
               <p className="mini-label">Power active</p>
               <strong>{powerText(game.pendingPower)}</strong>
-              <p>Click a card on the board.</p>
+              <p>{game.peekReveal ? "Flip the card back to continue." : "Click a card on the board."}</p>
+            </div>
+          )}
+
+          {game.peekReveal && (
+            <div className="held-panel reveal-panel">
+              <p className="mini-label">{canSeePeekReveal ? "Peeked card" : `${playerName(game, game.peekReveal.actorId)} is peeking`}</p>
+              <CardFace card={game.peekReveal.card} visible={canSeePeekReveal} compact={false} />
+              {canSeePeekReveal ? (
+                <button className="secondary" onClick={flipPeekBack}>
+                  Flip back
+                </button>
+              ) : (
+                <p>Waiting for them to flip it back.</p>
+              )}
             </div>
           )}
 
@@ -825,13 +878,18 @@ export default function Home() {
               </div>
               <div className="player-board">
                 {player.slots.map((slot) => {
-                  const visible = game.phase !== "playing" || (game.knowledge[game.viewerId] ?? []).includes(slot.card.id);
+                  const revealMatches =
+                    canSeePeekReveal &&
+                    game.peekReveal?.ref.playerId === player.id &&
+                    game.peekReveal.ref.slotId === slot.id;
+                  const visible = game.phase !== "playing" || revealMatches || (game.knowledge[game.viewerId] ?? []).includes(slot.card.id);
                   const canSwap = game.held && currentPlayer?.id === player.id && (!roomCode || assignedPlayerId === player.id);
+                  const wasLastSwap = game.lastSwap?.playerId === player.id && game.lastSwap.slotId === slot.id;
                   return (
-                    <div className="slot-wrap" key={slot.id}>
+                    <div className={`slot-wrap ${wasLastSwap ? "slot-swapped" : ""}`} key={slot.id}>
                       <button
                         className="card-button"
-                        disabled={!canSwap && (!game.pendingPower || (roomCode ? assignedPlayerId !== game.pendingPower.actorId : false))}
+                        disabled={!canSwap && (!game.pendingPower || !!game.peekReveal || (roomCode ? assignedPlayerId !== game.pendingPower.actorId : false))}
                         onClick={() => {
                           if (game.pendingPower) selectPowerCard({ playerId: player.id, slotId: slot.id });
                           else swapHeldWith({ playerId: player.id, slotId: slot.id });
@@ -839,6 +897,7 @@ export default function Home() {
                       >
                         <CardFace card={slot.card} visible={visible} compact={false} />
                       </button>
+                      {wasLastSwap && <span className="swap-marker">Swapped here</span>}
                       {topDiscard && player.id === game.viewerId && (!roomCode || assignedPlayerId === player.id) && (
                         <button className="stack-button" onClick={() => stackCard({ playerId: player.id, slotId: slot.id })}>
                           Stack
