@@ -1,98 +1,105 @@
-# vinext-starter
+# Red Card Game
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Red is a multiplayer memory card game about getting stuck with the lowest possible score. Each player starts with four face-down cards, gets one quick look at two of them, and then has to remember, bluff, swap, stack, and take risks as the round unfolds.
 
-## Prerequisites
+This web version supports 2-6 players in an online room. One player creates a room, shares the room code, and everyone joins from their own device.
+
+## Play Online
+
+Play the live version here:
+
+[https://red-card-room.rahulk1326.chatgpt.site](https://red-card-room.rahulk1326.chatgpt.site)
+
+To start a game:
+
+1. Open the live site.
+2. Choose the number of players and enter player names.
+3. Click **Create online room**.
+4. Share the room code with the other players.
+5. Each player opens the same link, enters the code, and joins.
+6. Once everyone is in, play through the opening peeks and start the round.
+
+## What The Game Is About
+
+The goal is simple: end the round with the lowest point total.
+
+The twist is that most cards stay face down. You only know what you have by remembering your opening peek, watching swaps, using power cards, and deciding whether a risky stack attempt is worth it.
+
+Players can also call **Red** after enough turns. Once Red is called, everyone else gets one final turn to improve their hand before scores are revealed.
+
+## Core Rules
+
+- Use a standard 52-card deck with no jokers.
+- Each player starts with 4 face-down cards in a 2x2 grid.
+- At the beginning of the round, each player may look at their bottom 2 cards once.
+- On your turn, draw from the face-down deck or take the top card from the discard pile.
+- If you draw from the deck, you may discard it or swap it into one of your own face-down slots.
+- If you take from the discard pile, that is your turn's draw and you must swap it into your own grid.
+- The card you swap out goes to the discard pile.
+- When the deck runs out, the discard pile is reshuffled into the deck while keeping the current top discard available.
+
+## Card Values
+
+| Card | Points |
+| --- | ---: |
+| King | -2 |
+| Ace | 0 |
+| 2-10 | Face value |
+| Jack | 10 |
+| Queen | 10 |
+
+Lowest total wins the round.
+
+## Power Cards
+
+Power cards only activate when drawn from the face-down deck and then discarded. They do not activate when they were already face down in a player's grid, when swapped out, or when taken from the discard pile.
+
+- **7**: Peek at any one card on the board.
+- **8**: Blind swap any two cards on the board.
+- **9**: Peek at any one card, then swap any two cards on the board. The peeked card and swapped cards may be different.
+
+## Stacking
+
+If the top discard is a rank you believe you have face down, you can try to stack one of your own cards on it.
+
+- You may only stack your own cards.
+- You can attempt a stack during any player's turn.
+- If the rank matches, your card is removed from your grid.
+- If the rank is wrong, the card returns to your grid and you draw an extra unknown face-down penalty card.
+- Only the first successful stack for a given discard is allowed, so timing matters.
+
+## Game Modes
+
+- **Single round**: lowest score wins that round.
+- **X-round match**: play a chosen number of rounds and compare total scores. Lowest cumulative score wins.
+
+## Local Development
+
+Prerequisite:
 
 - Node.js `>=22.13.0`
 
-## Quick Start
+Install and run:
 
 ```bash
 npm install
 npm run dev
+```
+
+Useful commands:
+
+```bash
 npm run build
+npm test
 ```
 
-This starter does not use `wrangler.jsonc`.
+## Tech Stack
 
-## Included Shape
+- Next.js / React
+- vinext
+- Cloudflare-style Worker entrypoint
+- D1-backed online room persistence for the hosted version
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+## Current Status
 
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+This is an active prototype. The hosted game already supports online room codes, per-device player assignment, hidden opponent drawn cards, power-card peeks, stacking, match scoring, and the custom Red rules described above.
