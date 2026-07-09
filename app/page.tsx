@@ -102,8 +102,15 @@ function isRed(card: Card) {
   return card.suit === "D" || card.suit === "H";
 }
 
+function suitSymbol(suit: Suit) {
+  if (suit === "C") return "♣";
+  if (suit === "D") return "♦";
+  if (suit === "H") return "♥";
+  return "♠";
+}
+
 function cardLabel(card: Card) {
-  return `${card.rank}${card.suit}`;
+  return `${card.rank}${suitSymbol(card.suit)}`;
 }
 
 function scoreSlots(slots: Slot[]) {
@@ -260,6 +267,7 @@ export default function Home() {
   const currentPlayer = game?.players[game.currentPlayer];
   const viewer = game?.players.find((player) => player.id === game.viewerId);
   const topDiscard = game?.discard[game.discard.length - 1] ?? null;
+  const canSeeHeldCard = !roomCode || assignedPlayerId === currentPlayer?.id;
   const matchLeader = useMemo(() => {
     if (!game) return null;
     const low = Math.min(...game.players.map((player) => player.matchScore));
@@ -775,14 +783,18 @@ export default function Home() {
 
           {game.held && (
             <div className="held-panel">
-              <p className="mini-label">Drawn card</p>
-              <CardFace card={game.held.card} visible compact={false} />
-              {game.held.source === "deck" && (
+              <p className="mini-label">{canSeeHeldCard ? "Drawn card" : `${currentPlayer?.name} drew a card`}</p>
+              <CardFace card={game.held.card} visible={canSeeHeldCard} compact={false} />
+              {canSeeHeldCard && game.held.source === "deck" && (
                 <button className="secondary" onClick={discardHeld}>
                   Discard it
                 </button>
               )}
-              <p>Choose one of {currentPlayer?.name}&apos;s cards to swap.</p>
+              <p>
+                {canSeeHeldCard
+                  ? `Choose one of ${currentPlayer?.name}'s cards to swap.`
+                  : `Waiting for ${currentPlayer?.name} to choose.`}
+              </p>
             </div>
           )}
 
@@ -915,7 +927,7 @@ function CardFace({ card, visible, compact }: { card: Card; visible: boolean; co
   return (
     <div className={`card-face ${isRed(card) ? "red-suit" : "black-suit"} ${compact ? "compact-card" : ""}`}>
       <span>{card.rank}</span>
-      <small>{card.suit}</small>
+      <small>{suitSymbol(card.suit)}</small>
       <em>{cardValue(card)}</em>
     </div>
   );
