@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 type Suit = "C" | "D" | "H" | "S";
 type Rank =
@@ -76,7 +76,7 @@ type GameState = {
   peekIndex: number;
   pendingPower: PowerState;
   peekReveal: PeekReveal | null;
-  lastSwap: CardRef | null;
+  lastSwap: CardRef[];
   joinedPlayerIds: string[];
   redCallerId: string | null;
   finalTurnsRemaining: string[];
@@ -161,7 +161,7 @@ function createRound(players: Player[], mode: "single" | "match", totalRounds: n
     peekIndex: 0,
     pendingPower: null,
     peekReveal: null,
-    lastSwap: null,
+    lastSwap: [],
     joinedPlayerIds: phase === "waiting" ? [] : dealt.map((player) => player.id),
     redCallerId: null,
     finalTurnsRemaining: [],
@@ -294,12 +294,7 @@ export default function Home() {
   const isMyInitialPeek = !!peekingPlayer && (!roomCode || assignedPlayerId === peekingPlayer.id);
   const flippedOpeningCards = peekingPlayer ? (initialPeekFlipped[peekingPlayer.id] ?? []) : [];
   const joinedPlayerIds = game?.joinedPlayerIds ?? game?.players.map((player) => player.id) ?? [];
-  const matchLeader = useMemo(() => {
-    if (!game) return null;
-    const low = Math.min(...game.players.map((player) => player.matchScore));
-    return game.players.filter((player) => player.matchScore === low).map((player) => player.name).join(", ");
-  }, [game]);
-
+  const lastSwapRefs = game ? normalizeSwapRefs(game.lastSwap) : [];
   useEffect(() => {
     if (!roomCode) return undefined;
 
@@ -522,7 +517,7 @@ export default function Home() {
         players,
         discard: [...game.discard, slot.card],
         held: null,
-        lastSwap: ref,
+        lastSwap: [ref],
         log: [`${currentPlayer.name} swapped into their grid and discarded ${cardLabel(slot.card)}.`, ...game.log],
       },
       currentPlayer.id,
@@ -833,19 +828,11 @@ export default function Home() {
       {blunder && <div className="blunder-flash">{blunder.message}</div>}
       <header className="topbar">
         <div>
-          <p className="eyebrow">Round {game.roundNumber} of {game.totalRounds}</p>
           <h1>Red</h1>
         </div>
         <div className="status-strip">
           <span>{game.phase === "waiting" ? "Waiting for players" : game.phase === "initialPeek" ? `Peek: ${peekingPlayer?.name}` : `Turn: ${currentPlayer?.name}`}</span>
-          <span>Deck: {game.deck.length}</span>
-          <span>Leader: {matchLeader}</span>
-          {game.phase === "waiting" && <span>Joined: {joinedPlayerIds.length}/{game.players.length}</span>}
-          {roomCode && <span>Room: {roomCode}</span>}
         </div>
-        <button className="ghost" onClick={reset}>
-          New game
-        </button>
       </header>
 
       <section className="table-grid">
@@ -872,6 +859,10 @@ export default function Home() {
               Call Red
             </button>
           )}
+
+          <button className="ghost" onClick={reset}>
+            New game
+          </button>
         </aside>
 
         <section className="table-stage" aria-label="Card table">
@@ -879,9 +870,9 @@ export default function Home() {
             <div className="table-rail" aria-hidden="true" />
             <div className="center-piles">
               <div>
-                <p className="mini-label">Deck</p>
+                <p className="mini-label">Draw</p>
                 <button className="deck-card" onClick={drawFromDeck} disabled={game.phase !== "playing" || !!game.held || !!game.pendingPower || (roomCode ? assignedPlayerId !== currentPlayer?.id : false)}>
-                  {game.deck.length}
+                  DRAW
                 </button>
               </div>
               <div>
@@ -971,14 +962,11 @@ export default function Home() {
             <article className={`player-card table-seat ${seatPosition(game.players.indexOf(player), game.players.length, viewerIndex)} ${player.id === currentPlayer?.id && game.phase === "playing" ? "active-player" : ""} ${player.id === game.viewerId ? "viewer-seat" : ""} ${joinedPlayerIds.includes(player.id) ? "joined-seat" : "empty-seat"} ${peekingPlayer?.id === player.id ? "peeking-seat" : ""}`} key={player.id}>
               <div className="player-head">
                 <div className="player-avatar" aria-hidden="true">{initials(player.name)}</div>
-                <div>
-                  <h2>{player.id === game.viewerId ? "You" : player.name}</h2>
-                  <p>{player.slots.length} cards · {player.turnsTaken} turns</p>
-                </div>
-                <strong>{player.matchScore} total</strong>
+                <h2>{player.id === game.viewerId ? "You" : player.name}</h2>
               </div>
               <div className="player-board">
                 {player.slots.map((slot) => {
+                  const seat = seatPosition(game.players.indexOf(player), game.players.length, viewerIndex);
                   const slotIndex = player.slots.findIndex((candidate) => candidate.id === slot.id);
                   const isOpeningBottomCard = game.phase === "initialPeek" && peekingPlayer?.id === player.id && slotIndex >= 2;
                   const openingReveal = isOpeningBottomCard && isMyInitialPeek && flippedOpeningCards.includes(slot.id);
@@ -992,9 +980,15 @@ export default function Home() {
                     revealMatches ||
                     (game.knowledge[game.viewerId] ?? []).includes(slot.card.id);
                   const canSwap = game.held && currentPlayer?.id === player.id && (!roomCode || assignedPlayerId === player.id);
-                  const wasLastSwap = game.lastSwap?.playerId === player.id && game.lastSwap.slotId === slot.id;
+                  const slotRef = { playerId: player.id, slotId: slot.id };
+                  const wasLastSwap = lastSwapRefs.some((ref) => sameRef(ref, slotRef));
+                  const isSelectedForPower = !!game.pendingPower?.selected.some((ref) => sameRef(ref, slotRef));
                   return (
-                    <div className={`slot-wrap ${wasLastSwap ? "slot-swapped" : ""} ${revealMatches || openingReveal ? "slot-revealed" : ""} ${isOpeningBottomCard && isMyInitialPeek ? "opening-clickable" : ""}`} key={slot.id}>
+                    <div
+                      className={`slot-wrap ${wasLastSwap ? "slot-swapped" : ""} ${isSelectedForPower ? "slot-selected" : ""} ${revealMatches || openingReveal ? "slot-revealed" : ""} ${isOpeningBottomCard && isMyInitialPeek ? "opening-clickable" : ""}`}
+                      key={slot.id}
+                      style={{ order: slotOrder(slotIndex, seat) }}
+                    >
                       <button
                         className="card-button"
                         disabled={
@@ -1005,8 +999,8 @@ export default function Home() {
                         }
                         onClick={() => {
                           if (isOpeningBottomCard && isMyInitialPeek) toggleInitialPeekCard(slot);
-                          else if (game.pendingPower) selectPowerCard({ playerId: player.id, slotId: slot.id });
-                          else swapHeldWith({ playerId: player.id, slotId: slot.id });
+                          else if (game.pendingPower) selectPowerCard(slotRef);
+                          else swapHeldWith(slotRef);
                         }}
                       >
                         <CardFace card={slot.card} visible={visible} compact={false} motion={wasLastSwap ? "swap" : revealMatches || openingReveal ? "peek" : undefined} />
@@ -1026,20 +1020,8 @@ export default function Home() {
           </section>
         </section>
 
-        <aside className="side-panel log-panel">
-          <h2>Scores</h2>
-          <div className="score-list">
-            {game.players.map((player) => (
-              <div key={player.id}>
-                <span>{player.name}</span>
-                <strong>
-                  <small>Round</small> {player.roundScore ?? "?"} <small>Total</small> {player.matchScore}
-                </strong>
-              </div>
-            ))}
-          </div>
-
-          {(game.phase === "roundOver" || game.phase === "matchOver") && (
+        {(game.phase === "roundOver" || game.phase === "matchOver") && (
+          <aside className="side-panel log-panel results-only-panel">
             <div className="result-panel">
               <h2>{game.phase === "matchOver" ? "Match complete" : "Round complete"}</h2>
               {game.players.map((player) => (
@@ -1053,15 +1035,8 @@ export default function Home() {
                 <button className="primary" onClick={reset}>Play again</button>
               )}
             </div>
-          )}
-
-          <h2>Table log</h2>
-          <ol className="log-list">
-            {game.log.slice(0, 8).map((entry, index) => (
-              <li key={`${entry}-${index}`}>{entry}</li>
-            ))}
-          </ol>
-        </aside>
+          </aside>
+        )}
       </section>
     </main>
   );
@@ -1083,7 +1058,7 @@ function swapBoardCards(state: GameState, first: CardRef, second: CardRef, messa
       return slot;
     }),
   }));
-  return { ...state, players, log: [message, ...state.log] };
+  return { ...state, players, lastSwap: [first, second], log: [message, ...state.log] };
 }
 
 function powerText(power: NonNullable<PowerState>) {
@@ -1105,6 +1080,22 @@ function seatPosition(index: number, total: number, viewerIndex: number) {
   return layouts[total]?.[relative] ?? "seat-bottom";
 }
 
+function sameRef(a: CardRef, b: CardRef) {
+  return a.playerId === b.playerId && a.slotId === b.slotId;
+}
+
+function normalizeSwapRefs(refs: GameState["lastSwap"] | CardRef | null | undefined) {
+  if (!refs) return [];
+  return Array.isArray(refs) ? refs : [refs];
+}
+
+function slotOrder(slotIndex: number, seat: string) {
+  if (seat.includes("top")) return [3, 4, 1, 2][slotIndex] ?? slotIndex + 1;
+  if (seat.includes("left")) return [2, 4, 1, 3][slotIndex] ?? slotIndex + 1;
+  if (seat.includes("right")) return [1, 3, 2, 4][slotIndex] ?? slotIndex + 1;
+  return slotIndex + 1;
+}
+
 function initials(name: string) {
   return name
     .split(/\s+/)
@@ -1117,7 +1108,7 @@ function initials(name: string) {
 function CardFace({ card, visible, compact, motion }: { card: Card; visible: boolean; compact: boolean; motion?: "drawn" | "swap" | "peek" | "discard" }) {
   const motionClass = motion ? `motion-${motion}` : "";
   if (!visible) {
-    return <div className={`card-face card-back ${motionClass} ${compact ? "compact-card" : ""}`}>RED</div>;
+    return <div className={`card-face card-back ${motionClass} ${compact ? "compact-card" : ""}`} />;
   }
 
   return (

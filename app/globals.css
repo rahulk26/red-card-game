@@ -402,7 +402,7 @@ button:focus-visible {
 
 .topbar h1 {
   margin: 0;
-  font-size: clamp(2rem, 5vw, 3.6rem);
+  font-size: clamp(2rem, 5vw, 3.2rem);
 }
 
 .status-strip {
@@ -447,6 +447,11 @@ button:focus-visible {
 .log-panel {
   order: 3;
   grid-template-columns: 1fr;
+}
+
+.results-only-panel {
+  max-width: 820px;
+  margin: 0 auto;
 }
 
 .table-stage {
@@ -599,10 +604,10 @@ button:focus-visible {
 
 .player-head {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .player-avatar {
@@ -619,6 +624,13 @@ button:focus-visible {
   box-shadow: 0 8px 18px rgba(7, 22, 14, 0.24);
   font-size: 0.86rem;
   font-weight: 900;
+}
+
+.player-head h2 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-head p {
@@ -649,7 +661,14 @@ button:focus-visible {
 .slot-swapped .card-face {
   outline: 3px solid #f2b84b;
   box-shadow: 0 0 0 5px rgba(242, 184, 75, 0.18), 0 10px 22px rgba(36, 27, 24, 0.14);
-  animation: swap-land 0.72s cubic-bezier(0.18, 0.9, 0.24, 1.18);
+  animation: swap-switch 0.86s cubic-bezier(0.18, 0.9, 0.24, 1.12);
+}
+
+.slot-selected .card-face {
+  outline: 3px solid #76d7ff;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 7px rgba(118, 215, 255, 0.18), 0 12px 26px rgba(7, 22, 14, 0.22);
+  transform: translateY(-9px) scale(1.04);
 }
 
 .slot-revealed .card-face {
@@ -714,8 +733,9 @@ button:focus-visible {
   border: 3px solid #fff;
   border-radius: 8px;
   box-shadow: 0 10px 22px rgba(36, 27, 24, 0.18);
-  font-size: 1.5rem;
+  font-size: 1rem;
   font-weight: 900;
+  letter-spacing: 0;
 }
 
 .deck-card:not(:disabled):active,
@@ -768,12 +788,11 @@ button:focus-visible {
 .card-back {
   color: #fff;
   background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.18) 0 18%, transparent 19%),
     linear-gradient(45deg, rgba(255, 255, 255, 0.13) 25%, transparent 25% 50%, rgba(255, 255, 255, 0.13) 50% 75%, transparent 75%),
     var(--red);
   background-size: 18px 18px;
   border: 3px solid #fff;
-  font-size: 1.15rem;
-  letter-spacing: 0;
 }
 
 .motion-drawn {
@@ -962,6 +981,28 @@ button:focus-visible {
 
   72% {
     transform: translateY(5px) scale(1.04) rotate(-1deg);
+  }
+
+  100% {
+    transform: translateY(0) scale(1) rotate(0);
+  }
+}
+
+@keyframes swap-switch {
+  0% {
+    transform: translateY(0) scale(1) rotate(0);
+  }
+
+  28% {
+    transform: translateY(-28px) scale(1.08) rotate(-5deg);
+  }
+
+  58% {
+    transform: translateY(-16px) translateX(18px) scale(1.03) rotate(5deg);
+  }
+
+  82% {
+    transform: translateY(4px) scale(1.02) rotate(-1deg);
   }
 
   100% {
