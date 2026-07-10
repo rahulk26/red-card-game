@@ -998,7 +998,7 @@ export default function Home() {
                   const canSwap = game.held && currentPlayer?.id === player.id && (!roomCode || assignedPlayerId === player.id);
                   const slotRef = { playerId: player.id, slotId: slot.id };
                   const wasLastSwap = lastSwapRefs.some((ref) => sameRef(ref, slotRef));
-                  const isSelectedForPower = !!game.pendingPower?.selected.some((ref) => sameRef(ref, slotRef));
+                  const isSelectedForPower = selectedPowerRefs(game.pendingPower).some((ref) => sameRef(ref, slotRef));
                   return (
                     <div
                       className={`slot-wrap ${wasLastSwap ? "slot-swapped" : ""} ${isSelectedForPower ? "slot-selected" : ""} ${revealMatches || openingReveal ? "slot-revealed" : ""} ${isOpeningBottomCard && isMyInitialPeek ? "opening-clickable" : ""}`}
@@ -1104,6 +1104,11 @@ function sameRef(a: CardRef, b: CardRef) {
 function normalizeSwapRefs(refs: GameState["lastSwap"] | CardRef | null | undefined) {
   if (!refs) return [];
   return Array.isArray(refs) ? refs : [refs];
+}
+
+function selectedPowerRefs(power: PowerState) {
+  if (!power || power.kind === "peek") return [];
+  return power.selected;
 }
 
 function slotOrder(slotIndex: number, seat: string) {
