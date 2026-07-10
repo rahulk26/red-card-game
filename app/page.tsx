@@ -282,6 +282,7 @@ export default function Home() {
   const topDiscard = game?.discard[game.discard.length - 1] ?? null;
   const canSeeHeldCard = !roomCode || assignedPlayerId === currentPlayer?.id;
   const canSeePeekReveal = !!game?.peekReveal && (!roomCode || assignedPlayerId === game.peekReveal.actorId);
+  const viewerIndex = game ? Math.max(0, game.players.findIndex((player) => player.id === game.viewerId)) : 0;
   const matchLeader = useMemo(() => {
     if (!game) return null;
     const low = Math.min(...game.players.map((player) => player.matchScore));
@@ -805,60 +806,6 @@ export default function Home() {
             </label>
           )}
 
-          <div className="pile-row">
-            <div>
-              <p className="mini-label">Deck</p>
-              <button className="deck-card" onClick={drawFromDeck} disabled={game.phase !== "playing" || !!game.held || !!game.pendingPower || (roomCode ? assignedPlayerId !== currentPlayer?.id : false)}>
-                {game.deck.length}
-              </button>
-            </div>
-            <div>
-              <p className="mini-label">Discard</p>
-              <button className="discard-card" onClick={drawFromDiscard} disabled={game.phase !== "playing" || !!game.held || !!game.pendingPower || !topDiscard || (roomCode ? assignedPlayerId !== currentPlayer?.id : false)}>
-                {topDiscard ? <CardFace card={topDiscard} visible compact /> : "Empty"}
-              </button>
-            </div>
-          </div>
-
-          {game.held && (
-            <div className="held-panel">
-              <p className="mini-label">{canSeeHeldCard ? "Drawn card" : `${currentPlayer?.name} drew a card`}</p>
-              <CardFace card={game.held.card} visible={canSeeHeldCard} compact={false} />
-              {canSeeHeldCard && game.held.source === "deck" && (
-                <button className="secondary" onClick={discardHeld}>
-                  Discard it
-                </button>
-              )}
-              <p>
-                {canSeeHeldCard
-                  ? `Choose one of ${currentPlayer?.name}'s cards to swap.`
-                  : `Waiting for ${currentPlayer?.name} to choose.`}
-              </p>
-            </div>
-          )}
-
-          {game.pendingPower && (
-            <div className="held-panel power-panel">
-              <p className="mini-label">Power active</p>
-              <strong>{powerText(game.pendingPower)}</strong>
-              <p>{game.peekReveal ? "Flip the card back to continue." : "Click a card on the board."}</p>
-            </div>
-          )}
-
-          {game.peekReveal && (
-            <div className="held-panel reveal-panel">
-              <p className="mini-label">{canSeePeekReveal ? "Peeked card" : `${playerName(game, game.peekReveal.actorId)} is peeking`}</p>
-              <CardFace card={game.peekReveal.card} visible={canSeePeekReveal} compact={false} />
-              {canSeePeekReveal ? (
-                <button className="secondary" onClick={flipPeekBack}>
-                  Flip back
-                </button>
-              ) : (
-                <p>Waiting for them to flip it back.</p>
-              )}
-            </div>
-          )}
-
           {currentPlayer && (
             <button className="red-button" disabled={currentPlayer.turnsTaken < 5 || !!game.held || !!game.pendingPower || !!game.redCallerId || (roomCode ? assignedPlayerId !== currentPlayer.id : false)} onClick={callRed}>
               Call Red
@@ -866,12 +813,73 @@ export default function Home() {
           )}
         </aside>
 
-        <section className="boards">
+        <section className="table-stage" aria-label="Card table">
+          <div className="felt-table">
+            <div className="table-rail" aria-hidden="true" />
+            <div className="center-piles">
+              <div>
+                <p className="mini-label">Deck</p>
+                <button className="deck-card" onClick={drawFromDeck} disabled={game.phase !== "playing" || !!game.held || !!game.pendingPower || (roomCode ? assignedPlayerId !== currentPlayer?.id : false)}>
+                  {game.deck.length}
+                </button>
+              </div>
+              <div>
+                <p className="mini-label">Discard</p>
+                <button className="discard-card" onClick={drawFromDiscard} disabled={game.phase !== "playing" || !!game.held || !!game.pendingPower || !topDiscard || (roomCode ? assignedPlayerId !== currentPlayer?.id : false)}>
+                  {topDiscard ? <CardFace card={topDiscard} visible compact motion="discard" /> : "Empty"}
+                </button>
+              </div>
+            </div>
+
+            <div className="table-action">
+              {game.held && (
+                <div className="held-panel card-motion-panel">
+                  <p className="mini-label">{canSeeHeldCard ? "Drawn card" : `${currentPlayer?.name} drew a card`}</p>
+                  <CardFace card={game.held.card} visible={canSeeHeldCard} compact={false} motion="drawn" />
+                  {canSeeHeldCard && game.held.source === "deck" && (
+                    <button className="secondary" onClick={discardHeld}>
+                      Discard it
+                    </button>
+                  )}
+                  <p>
+                    {canSeeHeldCard
+                      ? `Choose one of ${currentPlayer?.name}'s cards to swap.`
+                      : `Waiting for ${currentPlayer?.name} to choose.`}
+                  </p>
+                </div>
+              )}
+
+              {game.pendingPower && (
+                <div className="held-panel power-panel">
+                  <p className="mini-label">Power active</p>
+                  <strong>{powerText(game.pendingPower)}</strong>
+                  <p>{game.peekReveal ? "Flip the card back to continue." : "Click a card on the board."}</p>
+                </div>
+              )}
+
+              {game.peekReveal && (
+                <div className="held-panel reveal-panel card-motion-panel">
+                  <p className="mini-label">{canSeePeekReveal ? "Peeked card" : `${playerName(game, game.peekReveal.actorId)} is peeking`}</p>
+                  <CardFace card={game.peekReveal.card} visible={canSeePeekReveal} compact={false} motion="peek" />
+                  {canSeePeekReveal ? (
+                    <button className="secondary" onClick={flipPeekBack}>
+                      Flip back
+                    </button>
+                  ) : (
+                    <p>Waiting for them to flip it back.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <section className="boards table-seats">
           {game.players.map((player) => (
-            <article className={`player-card ${player.id === currentPlayer?.id ? "active-player" : ""}`} key={player.id}>
+            <article className={`player-card table-seat ${seatPosition(game.players.indexOf(player), game.players.length, viewerIndex)} ${player.id === currentPlayer?.id ? "active-player" : ""} ${player.id === game.viewerId ? "viewer-seat" : ""}`} key={player.id}>
               <div className="player-head">
+                <div className="player-avatar" aria-hidden="true">{initials(player.name)}</div>
                 <div>
-                  <h2>{player.name}</h2>
+                  <h2>{player.id === game.viewerId ? "You" : player.name}</h2>
                   <p>{player.slots.length} cards · {player.turnsTaken} turns</p>
                 </div>
                 <strong>{player.matchScore} total</strong>
@@ -886,7 +894,7 @@ export default function Home() {
                   const canSwap = game.held && currentPlayer?.id === player.id && (!roomCode || assignedPlayerId === player.id);
                   const wasLastSwap = game.lastSwap?.playerId === player.id && game.lastSwap.slotId === slot.id;
                   return (
-                    <div className={`slot-wrap ${wasLastSwap ? "slot-swapped" : ""}`} key={slot.id}>
+                    <div className={`slot-wrap ${wasLastSwap ? "slot-swapped" : ""} ${revealMatches ? "slot-revealed" : ""}`} key={slot.id}>
                       <button
                         className="card-button"
                         disabled={!canSwap && (!game.pendingPower || !!game.peekReveal || (roomCode ? assignedPlayerId !== game.pendingPower.actorId : false))}
@@ -895,7 +903,7 @@ export default function Home() {
                           else swapHeldWith({ playerId: player.id, slotId: slot.id });
                         }}
                       >
-                        <CardFace card={slot.card} visible={visible} compact={false} />
+                        <CardFace card={slot.card} visible={visible} compact={false} motion={wasLastSwap ? "swap" : revealMatches ? "peek" : undefined} />
                       </button>
                       {wasLastSwap && <span className="swap-marker">Swapped here</span>}
                       {topDiscard && player.id === game.viewerId && (!roomCode || assignedPlayerId === player.id) && (
@@ -909,6 +917,7 @@ export default function Home() {
               </div>
             </article>
           ))}
+          </section>
         </section>
 
         <aside className="side-panel log-panel">
@@ -978,13 +987,35 @@ function powerText(power: NonNullable<PowerState>) {
   return `9: now swap any two cards. Selected ${power.selected.length}/2.`;
 }
 
-function CardFace({ card, visible, compact }: { card: Card; visible: boolean; compact: boolean }) {
+function seatPosition(index: number, total: number, viewerIndex: number) {
+  const relative = (index - viewerIndex + total) % total;
+  const layouts: Record<number, string[]> = {
+    2: ["seat-bottom", "seat-top"],
+    3: ["seat-bottom", "seat-left", "seat-top"],
+    4: ["seat-bottom", "seat-left", "seat-top", "seat-right"],
+    5: ["seat-bottom", "seat-bottom-left", "seat-top-left", "seat-top-right", "seat-bottom-right"],
+    6: ["seat-bottom", "seat-bottom-left", "seat-left", "seat-top", "seat-right", "seat-bottom-right"],
+  };
+  return layouts[total]?.[relative] ?? "seat-bottom";
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "P";
+}
+
+function CardFace({ card, visible, compact, motion }: { card: Card; visible: boolean; compact: boolean; motion?: "drawn" | "swap" | "peek" | "discard" }) {
+  const motionClass = motion ? `motion-${motion}` : "";
   if (!visible) {
-    return <div className={`card-face card-back ${compact ? "compact-card" : ""}`}>RED</div>;
+    return <div className={`card-face card-back ${motionClass} ${compact ? "compact-card" : ""}`}>RED</div>;
   }
 
   return (
-    <div className={`card-face ${isRed(card) ? "red-suit" : "black-suit"} ${compact ? "compact-card" : ""}`}>
+    <div className={`card-face ${motionClass} ${isRed(card) ? "red-suit" : "black-suit"} ${compact ? "compact-card" : ""}`}>
       <span>{card.rank}</span>
       <small>{suitSymbol(card.suit)}</small>
       <em>{cardValue(card)}</em>
