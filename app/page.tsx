@@ -263,6 +263,7 @@ function forgetCard(state: GameState, viewerId: string, card: Card) {
 }
 
 export default function Home() {
+  const [setupView, setSetupView] = useState<"home" | "online" | "local">("home");
   const [playerCount, setPlayerCount] = useState(4);
   const [names, setNames] = useState(initialNames);
   const [mode, setMode] = useState<"single" | "match">("single");
@@ -345,6 +346,7 @@ export default function Home() {
     setRoomMessage("");
     setAssignedPlayerId("");
     setInitialPeekFlipped({});
+    setSetupView("home");
     setGame(createRound(players, mode, mode === "single" ? 1 : totalRounds, 1));
   }
 
@@ -372,6 +374,7 @@ export default function Home() {
     setAssignedPlayerId(data.playerId ?? "");
     setInitialPeekFlipped({});
     setRoomMessage(`Room ${data.code} is ready. Open this site on another device and join with that code.`);
+    setSetupView("home");
     setGame({ ...data.room.game, viewerId: data.playerId ?? data.room.game.viewerId });
   }
 
@@ -393,6 +396,7 @@ export default function Home() {
     setAssignedPlayerId(data.playerId);
     setInitialPeekFlipped({});
     setRoomMessage(`Joined room ${code}. You are ${data.room.game.players.find((player) => player.id === data.playerId)?.name ?? "a player"}.`);
+    setSetupView("home");
     setGame({ ...data.room.game, viewerId: data.playerId });
   }
 
@@ -675,90 +679,150 @@ export default function Home() {
     setRoomMessage("");
     setAssignedPlayerId("");
     setInitialPeekFlipped({});
+    setSetupView("home");
     setGame(null);
   }
 
   if (!game) {
-    return (
-      <main className="shell setup-shell">
-        <section className="setup-panel">
-          <div>
-            <p className="eyebrow">Online room prototype</p>
-            <h1>Red</h1>
-            <p className="intro">
-              A fast memory card game where low points win, stack calls are risky, and every face-down card
-              might be exactly what you need.
-            </p>
-          </div>
+    const setupFields = (
+      <>
+        <div className="setup-grid">
+          <label>
+            Players
+            <input
+              type="number"
+              min={2}
+              max={6}
+              value={playerCount}
+              onChange={(event) => setPlayerCount(Math.max(2, Math.min(6, Number(event.target.value))))}
+            />
+          </label>
+          <label>
+            Mode
+            <select value={mode} onChange={(event) => setMode(event.target.value as "single" | "match")}>
+              <option value="single">Single round</option>
+              <option value="match">X-round match</option>
+            </select>
+          </label>
+          <label>
+            Match rounds
+            <input
+              type="number"
+              min={2}
+              max={12}
+              disabled={mode === "single"}
+              value={totalRounds}
+              onChange={(event) => setTotalRounds(Math.max(2, Math.min(12, Number(event.target.value))))}
+            />
+          </label>
+        </div>
 
-          <div className="setup-grid">
-            <label>
-              Players
+        <div className="names-grid">
+          {Array.from({ length: playerCount }, (_, index) => (
+            <label key={index}>
+              Player {index + 1}
               <input
-                type="number"
-                min={2}
-                max={6}
-                value={playerCount}
-                onChange={(event) => setPlayerCount(Math.max(2, Math.min(6, Number(event.target.value))))}
+                value={names[index] ?? ""}
+                onChange={(event) => {
+                  const next = [...names];
+                  next[index] = event.target.value;
+                  setNames(next);
+                }}
               />
             </label>
-            <label>
-              Mode
-              <select value={mode} onChange={(event) => setMode(event.target.value as "single" | "match")}>
-                <option value="single">Single round</option>
-                <option value="match">X-round match</option>
-              </select>
-            </label>
-            <label>
-              Match rounds
-              <input
-                type="number"
-                min={2}
-                max={12}
-                disabled={mode === "single"}
-                value={totalRounds}
-                onChange={(event) => setTotalRounds(Math.max(2, Math.min(12, Number(event.target.value))))}
-              />
-            </label>
-          </div>
+          ))}
+        </div>
+      </>
+    );
 
-          <div className="names-grid">
-            {Array.from({ length: playerCount }, (_, index) => (
-              <label key={index}>
-                Player {index + 1}
-                <input
-                  value={names[index] ?? ""}
-                  onChange={(event) => {
-                    const next = [...names];
-                    next[index] = event.target.value;
-                    setNames(next);
-                  }}
-                />
-              </label>
-            ))}
-          </div>
+    if (setupView === "home") {
+      return (
+        <main className="shell setup-shell">
+          <section className="setup-panel home-panel">
+            <div className="brand-block">
+              <p className="eyebrow">Card room</p>
+              <h1>Red</h1>
+              <p className="intro">
+                Lowest points win. Remember your cards, swap carefully, and call Red when the table feels right.
+              </p>
+            </div>
 
-          <button className="primary" onClick={startGame}>
-            Deal local game
-          </button>
-
-          <div className="room-tools">
-            <button className="secondary" onClick={createRoom}>
-              Create online room
-            </button>
-            <div className="join-row">
-              <input
-                value={joinCode}
-                maxLength={5}
-                placeholder="Room code"
-                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-              />
-              <button className="ghost" onClick={joinRoom}>
-                Join
+            <div className="setup-actions">
+              <button className="mode-card primary-choice" onClick={() => setSetupView("online")}>
+                <span>Online Room</span>
+                <small>Create or join with a room code</small>
+              </button>
+              <button className="mode-card" onClick={() => setSetupView("local")}>
+                <span>Local Game</span>
+                <small>Play on one device</small>
               </button>
             </div>
-            {roomMessage && <p>{roomMessage}</p>}
-          </div>
+          </section>
+        </main>
+      );
+    }
+
+    return (
+      <main className="shell setup-shell">
+        <section className="setup-panel setup-flow-panel">
+          <button
+            className="ghost back-button"
+            onClick={() => {
+              setRoomMessage("");
+              setSetupView("home");
+            }}
+          >
+            Back
+          </button>
+
+          {setupView === "online" ? (
+            <>
+              <div className="brand-block compact">
+                <p className="eyebrow">Online room</p>
+                <h1>Room Setup</h1>
+              </div>
+
+              <div className="split-setup">
+                <div className="setup-card">
+                  <h2>Create a Game</h2>
+                  {setupFields}
+                  <button className="primary" onClick={createRoom}>
+                    Create online room
+                  </button>
+                </div>
+
+                <div className="setup-card join-card">
+                  <h2>Join a Game</h2>
+                  <div className="join-row">
+                    <input
+                      value={joinCode}
+                      maxLength={5}
+                      placeholder="Room code"
+                      onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                    />
+                    <button className="ghost" onClick={joinRoom}>
+                      Join
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {roomMessage && <p className="room-message">{roomMessage}</p>}
+            </>
+          ) : (
+            <>
+              <div className="brand-block compact">
+                <p className="eyebrow">Local game</p>
+                <h1>Table Setup</h1>
+              </div>
+
+              <div className="setup-card">
+                {setupFields}
+                <button className="primary" onClick={startGame}>
+                  Deal local game
+                </button>
+              </div>
+            </>
+          )}
         </section>
       </main>
     );

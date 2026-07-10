@@ -30,13 +30,11 @@ test("server-renders the Red setup screen", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Red<\/title>/i);
-  assert.match(html, /Online room prototype/);
-  assert.match(html, /A fast memory card game/);
-  assert.match(html, /Deal local game/);
-  assert.match(html, /Create online room/);
-  assert.match(html, /Room code/);
-  assert.match(html, /Single round/);
-  assert.match(html, /X-round match/);
+  assert.match(html, /Card room/);
+  assert.match(html, /Lowest points win/);
+  assert.match(html, /Online Room/);
+  assert.match(html, /Local Game/);
+  assert.match(html, /Create or join with a room code/);
   assert.doesNotMatch(html, /Your site is taking shape|react-loading-skeleton|codex-preview/i);
 });
 
