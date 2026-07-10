@@ -122,6 +122,30 @@ function assignPlayer(game: unknown, claims: Record<string, string>, clientId: s
   return nextPlayer.id;
 }
 
+function syncJoinedPlayers(game: unknown, claims: Record<string, string>) {
+  if (!game || typeof game !== "object") return game;
+  const gameState = game as {
+    phase?: string;
+    players?: Array<{ id: string }>;
+    joinedPlayerIds?: string[];
+    log?: string[];
+  };
+  const players = gameState.players ?? [];
+  const joinedPlayerIds = players
+    .map((player) => player.id)
+    .filter((playerId) => Object.values(claims).includes(playerId));
+  const allJoined = players.length > 0 && joinedPlayerIds.length >= players.length;
+  return {
+    ...gameState,
+    joinedPlayerIds,
+    phase: gameState.phase === "waiting" && allJoined ? "initialPeek" : gameState.phase,
+    log:
+      gameState.phase === "waiting" && allJoined
+        ? ["All players joined. Flip your bottom two cards to memorize them.", ...(gameState.log ?? [])]
+        : gameState.log,
+  };
+}
+
 async function handleRoomApi(request: Request, url: URL, env: Env) {
   if (url.pathname === "/api/red/rooms" && request.method === "POST") {
     const body = await readJson(request);
@@ -133,7 +157,7 @@ async function handleRoomApi(request: Request, url: URL, env: Env) {
     while (await getRoom(env, code)) code = roomCode();
     const claims: Record<string, string> = {};
     const playerId = assignPlayer(body.game, claims, body.clientId);
-    const room = { code, game: body.game, claims, updatedAt: Date.now() };
+    const room = { code, game: syncJoinedPlayers(body.game, claims), claims, updatedAt: Date.now() };
     await saveRoom(env, room);
     return json({ code, playerId, room });
   }
@@ -157,7 +181,7 @@ async function handleRoomApi(request: Request, url: URL, env: Env) {
     if (!room) return json({ error: "Room not found." }, { status: 404 });
     const playerId = assignPlayer(room.game, room.claims, body.clientId);
     if (!playerId) return json({ error: "Room is full." }, { status: 409 });
-    const next = { ...room, updatedAt: Date.now() };
+    const next = { ...room, game: syncJoinedPlayers(room.game, room.claims), updatedAt: Date.now() };
     await saveRoom(env, next);
     return json({ playerId, room: next });
   }

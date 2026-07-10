@@ -471,6 +471,20 @@ button:focus-visible {
   background: rgba(255, 250, 242, 0.98);
 }
 
+.empty-seat {
+  opacity: 0.62;
+  filter: saturate(0.75);
+}
+
+.joined-seat {
+  opacity: 1;
+}
+
+.peeking-seat {
+  outline: 3px solid #8bd96f;
+  box-shadow: 0 0 0 7px rgba(139, 217, 111, 0.16), var(--shadow);
+}
+
 .player-head {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -528,6 +542,12 @@ button:focus-visible {
 
 .slot-revealed .card-face {
   animation: flip-peek 0.62s cubic-bezier(0.2, 0.8, 0.18, 1);
+}
+
+.opening-clickable .card-button:not(:disabled) .card-face {
+  outline: 2px dashed rgba(244, 211, 94, 0.8);
+  outline-offset: 4px;
+  animation: opening-prompt 1.3s ease-in-out infinite;
 }
 
 .swap-marker {
@@ -727,6 +747,35 @@ button:focus-visible {
   border-color: #f2b84b;
 }
 
+.waiting-panel,
+.opening-panel {
+  text-align: center;
+}
+
+.queue-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.queue-list span {
+  min-height: 30px;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 250, 242, 0.72);
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.queue-list span.joined {
+  color: #143f25;
+  background: #c9f0b6;
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
 .score-list {
   display: grid;
   gap: 8px;
@@ -855,6 +904,17 @@ button:focus-visible {
   100% {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes opening-prompt {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+
+  50% {
+    transform: translateY(-6px) rotate(-1deg);
   }
 }
 

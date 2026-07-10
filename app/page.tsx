@@ -62,7 +62,7 @@ type PeekReveal = {
 };
 
 type GameState = {
-  phase: "setup" | "initialPeek" | "playing" | "roundOver" | "matchOver";
+  phase: "waiting" | "setup" | "initialPeek" | "playing" | "roundOver" | "matchOver";
   players: Player[];
   deck: Card[];
   discard: Card[];
@@ -77,6 +77,7 @@ type GameState = {
   pendingPower: PowerState;
   peekReveal: PeekReveal | null;
   lastSwap: CardRef | null;
+  joinedPlayerIds: string[];
   redCallerId: string | null;
   finalTurnsRemaining: string[];
   log: string[];
@@ -130,7 +131,7 @@ function scoreBreakdown(slots: Slot[]) {
   return slots.map((slot) => `${cardLabel(slot.card)}=${cardValue(slot.card)}`).join(" + ");
 }
 
-function createRound(players: Player[], mode: "single" | "match", totalRounds: number, roundNumber: number): GameState {
+function createRound(players: Player[], mode: "single" | "match", totalRounds: number, roundNumber: number, phase: GameState["phase"] = "initialPeek"): GameState {
   const deck = shuffle(buildDeck());
   const dealt = players.map((player, playerIndex) => ({
     ...player,
@@ -146,7 +147,7 @@ function createRound(players: Player[], mode: "single" | "match", totalRounds: n
   const knowledge = Object.fromEntries(dealt.map((player) => [player.id, []]));
 
   return {
-    phase: "initialPeek",
+    phase,
     players: dealt,
     deck: afterDeal.slice(1),
     discard: [firstDiscard],
@@ -161,9 +162,13 @@ function createRound(players: Player[], mode: "single" | "match", totalRounds: n
     pendingPower: null,
     peekReveal: null,
     lastSwap: null,
+    joinedPlayerIds: phase === "waiting" ? [] : dealt.map((player) => player.id),
     redCallerId: null,
     finalTurnsRemaining: [],
-    log: [`Round ${roundNumber} started. ${cardLabel(firstDiscard)} opens the discard pile.`],
+    log:
+      phase === "waiting"
+        ? [`Room created. Waiting for ${players.length} players to join.`]
+        : [`Round ${roundNumber} started. ${cardLabel(firstDiscard)} opens the discard pile.`],
   };
 }
 
@@ -267,6 +272,7 @@ export default function Home() {
   const [roomCode, setRoomCode] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [roomMessage, setRoomMessage] = useState("");
+  const [initialPeekFlipped, setInitialPeekFlipped] = useState<Record<string, string[]>>({});
   const [clientId] = useState(() => {
     if (typeof window === "undefined") return "server";
     const existing = window.sessionStorage.getItem("red-client-id");
@@ -283,6 +289,10 @@ export default function Home() {
   const canSeeHeldCard = !roomCode || assignedPlayerId === currentPlayer?.id;
   const canSeePeekReveal = !!game?.peekReveal && (!roomCode || assignedPlayerId === game.peekReveal.actorId);
   const viewerIndex = game ? Math.max(0, game.players.findIndex((player) => player.id === game.viewerId)) : 0;
+  const peekingPlayer = game?.phase === "initialPeek" ? game.players[game.peekIndex] : null;
+  const isMyInitialPeek = !!peekingPlayer && (!roomCode || assignedPlayerId === peekingPlayer.id);
+  const flippedOpeningCards = peekingPlayer ? (initialPeekFlipped[peekingPlayer.id] ?? []) : [];
+  const joinedPlayerIds = game?.joinedPlayerIds ?? game?.players.map((player) => player.id) ?? [];
   const matchLeader = useMemo(() => {
     if (!game) return null;
     const low = Math.min(...game.players.map((player) => player.matchScore));
@@ -334,6 +344,7 @@ export default function Home() {
     setRoomCode("");
     setRoomMessage("");
     setAssignedPlayerId("");
+    setInitialPeekFlipped({});
     setGame(createRound(players, mode, mode === "single" ? 1 : totalRounds, 1));
   }
 
@@ -345,7 +356,7 @@ export default function Home() {
       turnsTaken: 0,
       matchScore: 0,
     }));
-    const next = createRound(players, mode, mode === "single" ? 1 : totalRounds, 1);
+    const next = createRound(players, mode, mode === "single" ? 1 : totalRounds, 1, "waiting");
     setRoomMessage("Creating room...");
     const response = await fetch("/api/red/rooms", {
       method: "POST",
@@ -356,11 +367,12 @@ export default function Home() {
       setRoomMessage("Could not create a room.");
       return;
     }
-    const data = (await response.json()) as { code: string; playerId: string | null };
+    const data = (await response.json()) as { code: string; playerId: string | null; room: { game: GameState } };
     setRoomCode(data.code);
     setAssignedPlayerId(data.playerId ?? "");
+    setInitialPeekFlipped({});
     setRoomMessage(`Room ${data.code} is ready. Open this site on another device and join with that code.`);
-    setGame({ ...next, viewerId: data.playerId ?? next.viewerId });
+    setGame({ ...data.room.game, viewerId: data.playerId ?? data.room.game.viewerId });
   }
 
   async function joinRoom() {
@@ -379,16 +391,32 @@ export default function Home() {
     const data = (await response.json()) as { playerId: string; room: { game: GameState } };
     setRoomCode(code);
     setAssignedPlayerId(data.playerId);
+    setInitialPeekFlipped({});
     setRoomMessage(`Joined room ${code}. You are ${data.room.game.players.find((player) => player.id === data.playerId)?.name ?? "a player"}.`);
     setGame({ ...data.room.game, viewerId: data.playerId });
+  }
+
+  function toggleInitialPeekCard(slot: Slot) {
+    if (!game || !peekingPlayer || !isMyInitialPeek) return;
+    const peekingSlots = peekingPlayer.slots.slice(2, 4).map((candidate) => candidate.id);
+    if (!peekingSlots.includes(slot.id)) return;
+    setInitialPeekFlipped((current) => {
+      const flipped = new Set(current[peekingPlayer.id] ?? []);
+      if (flipped.has(slot.id)) flipped.delete(slot.id);
+      else flipped.add(slot.id);
+      return { ...current, [peekingPlayer.id]: [...flipped] };
+    });
   }
 
   function completeInitialPeek() {
     if (!game) return;
     const peeking = game.players[game.peekIndex];
     if (roomCode && assignedPlayerId !== peeking.id) return;
+    const flipped = initialPeekFlipped[peeking.id] ?? [];
+    if (flipped.length < 2) return;
     const nextPeekIndex = game.peekIndex + 1;
     const donePeeking = nextPeekIndex >= game.players.length;
+    setInitialPeekFlipped((current) => ({ ...current, [peeking.id]: [] }));
     commitGame({
       ...game,
       peekIndex: nextPeekIndex,
@@ -410,7 +438,7 @@ export default function Home() {
   }
 
   function drawFromDeck() {
-    if (!game || game.held || game.pendingPower) return;
+    if (!game || game.phase !== "playing" || game.held || game.pendingPower) return;
     if (roomCode && assignedPlayerId !== currentPlayer?.id) return;
     let ready = ensureDeck(game);
     if (ready.deck.length === 0) return;
@@ -427,7 +455,7 @@ export default function Home() {
   }
 
   function drawFromDiscard() {
-    if (!game || game.held || game.pendingPower || game.discard.length === 0 || !currentPlayer) return;
+    if (!game || game.phase !== "playing" || game.held || game.pendingPower || game.discard.length === 0 || !currentPlayer) return;
     if (roomCode && assignedPlayerId !== currentPlayer.id) return;
     const card = game.discard[game.discard.length - 1];
     commitGame(
@@ -503,7 +531,7 @@ export default function Home() {
   }
 
   function callRed() {
-    if (!game || !currentPlayer || game.held || game.pendingPower || currentPlayer.turnsTaken < 5) return;
+    if (!game || game.phase !== "playing" || !currentPlayer || game.held || game.pendingPower || currentPlayer.turnsTaken < 5) return;
     if (roomCode && assignedPlayerId !== currentPlayer.id) return;
     const remaining = game.players
       .filter((player) => player.id !== currentPlayer.id)
@@ -589,7 +617,7 @@ export default function Home() {
   }
 
   function stackCard(ref: CardRef) {
-    if (!game || !topDiscard || game.held) return;
+    if (!game || game.phase !== "playing" || !topDiscard || game.held) return;
     if (roomCode && assignedPlayerId !== ref.playerId) return;
     if (ref.playerId !== game.viewerId) return;
     const { playerIndex, slotIndex, slot } = findSlot(game.players, ref);
@@ -646,6 +674,7 @@ export default function Home() {
     setRoomCode("");
     setRoomMessage("");
     setAssignedPlayerId("");
+    setInitialPeekFlipped({});
     setGame(null);
   }
 
@@ -735,39 +764,6 @@ export default function Home() {
     );
   }
 
-  if (game.phase === "initialPeek") {
-    const peeking = game.players[game.peekIndex];
-    const isMyPeek = !roomCode || assignedPlayerId === peeking.id;
-    if (!isMyPeek) {
-      return (
-        <main className="shell peek-shell">
-          <section className="peek-panel">
-            <p className="eyebrow">Waiting</p>
-            <h1>{peeking.name} is looking at their bottom two cards</h1>
-            <p className="intro">Your cards stay hidden. Your device will update when it is your turn to peek or play.</p>
-            {roomCode && <p className="room-note">Room {roomCode}</p>}
-          </section>
-        </main>
-      );
-    }
-    return (
-      <main className="shell peek-shell">
-        <section className="peek-panel">
-          <p className="eyebrow">Opening memory</p>
-          <h1>{peeking.name}, look at your bottom two cards once</h1>
-          <div className="player-board focus-board">
-            {peeking.slots.map((slot, index) => (
-              <CardFace key={slot.id} card={slot.card} visible={index >= 2} compact={false} />
-            ))}
-          </div>
-          <button className="primary" onClick={completeInitialPeek}>
-            I memorized them
-          </button>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main className="shell table-shell">
       {blunder && <div className="blunder-flash">{blunder.message}</div>}
@@ -777,9 +773,10 @@ export default function Home() {
           <h1>Red</h1>
         </div>
         <div className="status-strip">
-          <span>Turn: {currentPlayer?.name}</span>
+          <span>{game.phase === "waiting" ? "Waiting for players" : game.phase === "initialPeek" ? `Peek: ${peekingPlayer?.name}` : `Turn: ${currentPlayer?.name}`}</span>
           <span>Deck: {game.deck.length}</span>
           <span>Leader: {matchLeader}</span>
+          {game.phase === "waiting" && <span>Joined: {joinedPlayerIds.length}/{game.players.length}</span>}
           {roomCode && <span>Room: {roomCode}</span>}
         </div>
         <button className="ghost" onClick={reset}>
@@ -807,7 +804,7 @@ export default function Home() {
           )}
 
           {currentPlayer && (
-            <button className="red-button" disabled={currentPlayer.turnsTaken < 5 || !!game.held || !!game.pendingPower || !!game.redCallerId || (roomCode ? assignedPlayerId !== currentPlayer.id : false)} onClick={callRed}>
+            <button className="red-button" disabled={game.phase !== "playing" || currentPlayer.turnsTaken < 5 || !!game.held || !!game.pendingPower || !!game.redCallerId || (roomCode ? assignedPlayerId !== currentPlayer.id : false)} onClick={callRed}>
               Call Red
             </button>
           )}
@@ -832,6 +829,38 @@ export default function Home() {
             </div>
 
             <div className="table-action">
+              {game.phase === "waiting" && (
+                <div className="held-panel waiting-panel">
+                  <p className="mini-label">Room queue</p>
+                  <strong>{joinedPlayerIds.length} of {game.players.length} players seated</strong>
+                  <div className="queue-list">
+                    {game.players.map((player) => (
+                      <span className={joinedPlayerIds.includes(player.id) ? "joined" : ""} key={player.id}>
+                        {player.name}
+                      </span>
+                    ))}
+                  </div>
+                  <p>{roomCode ? `Share room ${roomCode}. The opening flips start when everyone joins.` : "Waiting for players."}</p>
+                </div>
+              )}
+
+              {game.phase === "initialPeek" && peekingPlayer && (
+                <div className="held-panel opening-panel">
+                  <p className="mini-label">Opening memory</p>
+                  <strong>{isMyInitialPeek ? "Flip your bottom two cards" : `${peekingPlayer.name} is memorizing`}</strong>
+                  <p>
+                    {isMyInitialPeek
+                      ? `${flippedOpeningCards.length}/2 flipped. Click both bottom cards, remember them, then turn them back down.`
+                      : "Their cards stay private on your screen."}
+                  </p>
+                  {isMyInitialPeek && (
+                    <button className="secondary" disabled={flippedOpeningCards.length < 2} onClick={completeInitialPeek}>
+                      Flip back and continue
+                    </button>
+                  )}
+                </div>
+              )}
+
               {game.held && (
                 <div className="held-panel card-motion-panel">
                   <p className="mini-label">{canSeeHeldCard ? "Drawn card" : `${currentPlayer?.name} drew a card`}</p>
@@ -875,7 +904,7 @@ export default function Home() {
 
           <section className="boards table-seats">
           {game.players.map((player) => (
-            <article className={`player-card table-seat ${seatPosition(game.players.indexOf(player), game.players.length, viewerIndex)} ${player.id === currentPlayer?.id ? "active-player" : ""} ${player.id === game.viewerId ? "viewer-seat" : ""}`} key={player.id}>
+            <article className={`player-card table-seat ${seatPosition(game.players.indexOf(player), game.players.length, viewerIndex)} ${player.id === currentPlayer?.id && game.phase === "playing" ? "active-player" : ""} ${player.id === game.viewerId ? "viewer-seat" : ""} ${joinedPlayerIds.includes(player.id) ? "joined-seat" : "empty-seat"} ${peekingPlayer?.id === player.id ? "peeking-seat" : ""}`} key={player.id}>
               <div className="player-head">
                 <div className="player-avatar" aria-hidden="true">{initials(player.name)}</div>
                 <div>
@@ -886,27 +915,40 @@ export default function Home() {
               </div>
               <div className="player-board">
                 {player.slots.map((slot) => {
+                  const slotIndex = player.slots.findIndex((candidate) => candidate.id === slot.id);
+                  const isOpeningBottomCard = game.phase === "initialPeek" && peekingPlayer?.id === player.id && slotIndex >= 2;
+                  const openingReveal = isOpeningBottomCard && isMyInitialPeek && flippedOpeningCards.includes(slot.id);
                   const revealMatches =
                     canSeePeekReveal &&
                     game.peekReveal?.ref.playerId === player.id &&
                     game.peekReveal.ref.slotId === slot.id;
-                  const visible = game.phase !== "playing" || revealMatches || (game.knowledge[game.viewerId] ?? []).includes(slot.card.id);
+                  const visible =
+                    (game.phase !== "playing" && game.phase !== "initialPeek" && game.phase !== "waiting") ||
+                    openingReveal ||
+                    revealMatches ||
+                    (game.knowledge[game.viewerId] ?? []).includes(slot.card.id);
                   const canSwap = game.held && currentPlayer?.id === player.id && (!roomCode || assignedPlayerId === player.id);
                   const wasLastSwap = game.lastSwap?.playerId === player.id && game.lastSwap.slotId === slot.id;
                   return (
-                    <div className={`slot-wrap ${wasLastSwap ? "slot-swapped" : ""} ${revealMatches ? "slot-revealed" : ""}`} key={slot.id}>
+                    <div className={`slot-wrap ${wasLastSwap ? "slot-swapped" : ""} ${revealMatches || openingReveal ? "slot-revealed" : ""} ${isOpeningBottomCard && isMyInitialPeek ? "opening-clickable" : ""}`} key={slot.id}>
                       <button
                         className="card-button"
-                        disabled={!canSwap && (!game.pendingPower || !!game.peekReveal || (roomCode ? assignedPlayerId !== game.pendingPower.actorId : false))}
+                        disabled={
+                          game.phase === "waiting" ||
+                          (!isOpeningBottomCard || !isMyInitialPeek) &&
+                            !canSwap &&
+                            (!game.pendingPower || !!game.peekReveal || (roomCode ? assignedPlayerId !== game.pendingPower.actorId : false))
+                        }
                         onClick={() => {
-                          if (game.pendingPower) selectPowerCard({ playerId: player.id, slotId: slot.id });
+                          if (isOpeningBottomCard && isMyInitialPeek) toggleInitialPeekCard(slot);
+                          else if (game.pendingPower) selectPowerCard({ playerId: player.id, slotId: slot.id });
                           else swapHeldWith({ playerId: player.id, slotId: slot.id });
                         }}
                       >
-                        <CardFace card={slot.card} visible={visible} compact={false} motion={wasLastSwap ? "swap" : revealMatches ? "peek" : undefined} />
+                        <CardFace card={slot.card} visible={visible} compact={false} motion={wasLastSwap ? "swap" : revealMatches || openingReveal ? "peek" : undefined} />
                       </button>
                       {wasLastSwap && <span className="swap-marker">Swapped here</span>}
-                      {topDiscard && player.id === game.viewerId && (!roomCode || assignedPlayerId === player.id) && (
+                      {game.phase === "playing" && topDiscard && player.id === game.viewerId && (!roomCode || assignedPlayerId === player.id) && (
                         <button className="stack-button" onClick={() => stackCard({ playerId: player.id, slotId: slot.id })}>
                           Stack
                         </button>
