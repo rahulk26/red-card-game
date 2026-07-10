@@ -143,14 +143,13 @@ function createRound(players: Player[], mode: "single" | "match", totalRounds: n
     })),
   }));
   const afterDeal = deck.slice(players.length * 4);
-  const firstDiscard = afterDeal[0];
   const knowledge = Object.fromEntries(dealt.map((player) => [player.id, []]));
 
   return {
     phase,
     players: dealt,
-    deck: afterDeal.slice(1),
-    discard: [firstDiscard],
+    deck: afterDeal,
+    discard: [],
     currentPlayer: 0,
     viewerId: dealt[0].id,
     roundNumber,
@@ -168,7 +167,7 @@ function createRound(players: Player[], mode: "single" | "match", totalRounds: n
     log:
       phase === "waiting"
         ? [`Room created. Waiting for ${players.length} players to join.`]
-        : [`Round ${roundNumber} started. ${cardLabel(firstDiscard)} opens the discard pile.`],
+        : [`Round ${roundNumber} started. ${dealt[0].name} draws first.`],
   };
 }
 
