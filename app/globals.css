@@ -429,8 +429,10 @@ button:focus-visible {
 
 .side-panel,
 .player-card {
-  background: rgba(255, 250, 242, 0.92);
-  border: 1px solid rgba(255, 250, 242, 0.62);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 242, 0.92), rgba(255, 250, 242, 0.86)),
+    var(--player-soft, rgba(255, 250, 242, 0.92));
+  border: 2px solid var(--player-accent, rgba(255, 250, 242, 0.62));
   border-radius: 8px;
   box-shadow: var(--shadow);
 }
@@ -585,7 +587,9 @@ button:focus-visible {
 }
 
 .viewer-seat {
-  background: rgba(255, 250, 242, 0.98);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 250, 242, 0.9)),
+    var(--player-soft, rgba(255, 250, 242, 0.98));
 }
 
 .empty-seat {
@@ -608,6 +612,8 @@ button:focus-visible {
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+  padding-bottom: 9px;
+  border-bottom: 3px solid var(--player-accent, rgba(47, 128, 237, 0.55));
 }
 
 .player-avatar {
@@ -618,7 +624,7 @@ button:focus-visible {
   color: #fff;
   background:
     radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.24), transparent 35%),
-    linear-gradient(145deg, #2f8b4d, #143f25);
+    linear-gradient(145deg, var(--player-accent, #2f8b4d), var(--player-deep, #143f25));
   border: 3px solid rgba(255, 255, 255, 0.72);
   border-radius: 50%;
   box-shadow: 0 8px 18px rgba(7, 22, 14, 0.24);
@@ -628,6 +634,7 @@ button:focus-visible {
 
 .player-head h2 {
   margin: 0;
+  color: var(--player-deep, var(--ink));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 
 type Suit = "C" | "D" | "H" | "S";
@@ -87,6 +88,14 @@ const ranks: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "
 const suits: Suit[] = ["C", "D", "H", "S"];
 
 const initialNames = ["Alex", "Blair", "Casey", "Devon"];
+const playerColors = [
+  { accent: "#2f80ed", soft: "rgba(47, 128, 237, 0.17)", deep: "#174c8f" },
+  { accent: "#d14b7a", soft: "rgba(209, 75, 122, 0.18)", deep: "#89304f" },
+  { accent: "#8a63d2", soft: "rgba(138, 99, 210, 0.18)", deep: "#52358f" },
+  { accent: "#d98b2b", soft: "rgba(217, 139, 43, 0.2)", deep: "#8d5517" },
+  { accent: "#1f9d7a", soft: "rgba(31, 157, 122, 0.18)", deep: "#12614c" },
+  { accent: "#c24b42", soft: "rgba(194, 75, 66, 0.18)", deep: "#7d2b26" },
+];
 
 function buildDeck() {
   return ranks.flatMap((rank) => suits.map((suit) => ({ id: `${rank}-${suit}`, rank, suit })));
@@ -957,15 +966,23 @@ export default function Home() {
           </div>
 
           <section className="boards table-seats">
-          {game.players.map((player) => (
-            <article className={`player-card table-seat ${seatPosition(game.players.indexOf(player), game.players.length, viewerIndex)} ${player.id === currentPlayer?.id && game.phase === "playing" ? "active-player" : ""} ${player.id === game.viewerId ? "viewer-seat" : ""} ${joinedPlayerIds.includes(player.id) ? "joined-seat" : "empty-seat"} ${peekingPlayer?.id === player.id ? "peeking-seat" : ""}`} key={player.id}>
+          {game.players.map((player) => {
+            const playerIndex = game.players.indexOf(player);
+            const playerColor = playerColors[playerIndex % playerColors.length];
+            const playerStyle = {
+              "--player-accent": playerColor.accent,
+              "--player-soft": playerColor.soft,
+              "--player-deep": playerColor.deep,
+            } as CSSProperties;
+            return (
+            <article className={`player-card table-seat ${seatPosition(playerIndex, game.players.length, viewerIndex)} ${player.id === currentPlayer?.id && game.phase === "playing" ? "active-player" : ""} ${player.id === game.viewerId ? "viewer-seat" : ""} ${joinedPlayerIds.includes(player.id) ? "joined-seat" : "empty-seat"} ${peekingPlayer?.id === player.id ? "peeking-seat" : ""}`} key={player.id} style={playerStyle}>
               <div className="player-head">
                 <div className="player-avatar" aria-hidden="true">{initials(player.name)}</div>
-                <h2>{player.id === game.viewerId ? "You" : player.name}</h2>
+                <h2>{player.name}</h2>
               </div>
               <div className="player-board">
                 {player.slots.map((slot) => {
-                  const seat = seatPosition(game.players.indexOf(player), game.players.length, viewerIndex);
+                  const seat = seatPosition(playerIndex, game.players.length, viewerIndex);
                   const slotIndex = player.slots.findIndex((candidate) => candidate.id === slot.id);
                   const isOpeningBottomCard = game.phase === "initialPeek" && peekingPlayer?.id === player.id && slotIndex >= 2;
                   const openingReveal = isOpeningBottomCard && isMyInitialPeek && flippedOpeningCards.includes(slot.id);
@@ -1015,7 +1032,8 @@ export default function Home() {
                 })}
               </div>
             </article>
-          ))}
+            );
+          })}
           </section>
         </section>
 
