@@ -742,22 +742,52 @@ export default function Home() {
       return (
         <main className="shell setup-shell">
           <section className="setup-panel home-panel">
-            <div className="brand-block">
-              <p className="eyebrow">Card room</p>
-              <h1>Red</h1>
+            <div className="home-hero-copy">
+              <div className="home-brand">
+                <div className="mini-card-stack" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span>A♥</span>
+                </div>
+                <p className="eyebrow">Red Card Room</p>
+              </div>
+              <h1 className="home-title"><span>Welcome to</span> Red</h1>
               <p className="intro">
-                Lowest points win. Remember your cards, swap carefully, and call Red when the table feels right.
+                The memory card game of strategy, timing, and a little bit of luck.
               </p>
+              <div className="home-features" aria-label="Game goals">
+                <span><strong>♕</strong> Lowest points win</span>
+                <span><strong>⇄</strong> Swap strategically</span>
+                <span><strong>♠</strong> Call Red at the right time</span>
+              </div>
+              <button className="how-button" type="button">
+                <span>▣</span>
+                How to Play
+              </button>
             </div>
 
             <div className="setup-actions">
               <button className="mode-card primary-choice" onClick={() => setSetupView("online")}>
+                <span className="choice-icon" aria-hidden="true">●●</span>
                 <span>Online Room</span>
                 <small>Create or join with a room code</small>
+                <strong>Play Online ›</strong>
+                <div className="card-fan card-fan-face" aria-hidden="true">
+                  <i>A♥</i>
+                  <i>K♦</i>
+                  <i>Q♠</i>
+                </div>
               </button>
               <button className="mode-card" onClick={() => setSetupView("local")}>
+                <span className="choice-icon" aria-hidden="true">▯</span>
                 <span>Local Game</span>
-                <small>Play on one device</small>
+                <small>Play on one device with friends</small>
+                <strong>Play Local ›</strong>
+                <div className="card-fan card-fan-back" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </div>
               </button>
             </div>
           </section>

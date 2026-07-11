@@ -30,8 +30,9 @@ test("server-renders the Red setup screen", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Red<\/title>/i);
-  assert.match(html, /Card room/);
-  assert.match(html, /Lowest points win/);
+  assert.match(html, /Red Card Room/);
+  assert.match(html, /Welcome to/);
+  assert.match(html, /The memory card game/);
   assert.match(html, /Online Room/);
   assert.match(html, /Local Game/);
   assert.match(html, /Create or join with a room code/);
