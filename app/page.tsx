@@ -81,6 +81,7 @@ type GameState = {
   joinedPlayerIds: string[];
   redCallerId: string | null;
   finalTurnsRemaining: string[];
+  rematchReadyIds: string[];
   log: string[];
 };
 
@@ -173,6 +174,7 @@ function createRound(players: Player[], mode: "single" | "match", totalRounds: n
     joinedPlayerIds: phase === "waiting" ? [] : dealt.map((player) => player.id),
     redCallerId: null,
     finalTurnsRemaining: [],
+    rematchReadyIds: [],
     log:
       phase === "waiting"
         ? [`Room created. Waiting for ${players.length} players to join.`]
@@ -281,6 +283,8 @@ export default function Home() {
   const [roomCode, setRoomCode] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [roomMessage, setRoomMessage] = useState("");
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [quitConfirmOpen, setQuitConfirmOpen] = useState(false);
   const [initialPeekFlipped, setInitialPeekFlipped] = useState<Record<string, string[]>>({});
   const [clientId] = useState(() => {
     if (typeof window === "undefined") return "server";
@@ -303,6 +307,10 @@ export default function Home() {
   const flippedOpeningCards = peekingPlayer ? (initialPeekFlipped[peekingPlayer.id] ?? []) : [];
   const joinedPlayerIds = game?.joinedPlayerIds ?? game?.players.map((player) => player.id) ?? [];
   const lastSwapRefs = game ? normalizeSwapRefs(game.lastSwap) : [];
+  const redCaller = game?.redCallerId ? game.players.find((player) => player.id === game.redCallerId) : null;
+  const rematchReadyIds = game?.rematchReadyIds ?? [];
+  const rematchTargetIds = joinedPlayerIds.length > 0 ? joinedPlayerIds : game?.players.map((player) => player.id) ?? [];
+  const viewerReady = !!assignedPlayerId && rematchReadyIds.includes(assignedPlayerId);
   useEffect(() => {
     if (!roomCode) return undefined;
 
@@ -677,14 +685,121 @@ export default function Home() {
     commitGame(createRound(game.players, game.mode, game.totalRounds, game.roundNumber + 1));
   }
 
+  function nextGameFromResults(state: GameState) {
+    if (state.phase === "roundOver" && state.roundNumber < state.totalRounds) {
+      return createRound(state.players, state.mode, state.totalRounds, state.roundNumber + 1);
+    }
+    const players = state.players.map((player) => ({ ...player, matchScore: 0, roundScore: undefined }));
+    return createRound(players, state.mode, state.totalRounds, 1);
+  }
+
+  function playAgain() {
+    if (!game || (game.phase !== "roundOver" && game.phase !== "matchOver")) return;
+    if (!roomCode) {
+      commitGame(nextGameFromResults(game));
+      return;
+    }
+    if (!assignedPlayerId) return;
+    const ready = Array.from(new Set([...(game.rematchReadyIds ?? []), assignedPlayerId]));
+    const targetIds = (game.joinedPlayerIds.length > 0 ? game.joinedPlayerIds : game.players.map((player) => player.id));
+    const allReady = targetIds.every((playerId) => ready.includes(playerId));
+    if (allReady) {
+      commitGame({
+        ...nextGameFromResults(game),
+        joinedPlayerIds: targetIds,
+        viewerId: targetIds[0] ?? game.viewerId,
+        log: ["Everyone is ready. New deal started.", ...game.log],
+      });
+      return;
+    }
+    commitGame({
+      ...game,
+      rematchReadyIds: ready,
+      log: [`${playerName(game, assignedPlayerId)} is ready to play again.`, ...game.log],
+    });
+  }
+
   function reset() {
     setRoomCode("");
     setRoomMessage("");
     setAssignedPlayerId("");
     setInitialPeekFlipped({});
+    setRulesOpen(false);
+    setQuitConfirmOpen(false);
     setSetupView("home");
     setGame(null);
   }
+
+  function quitGame() {
+    setQuitConfirmOpen(true);
+  }
+
+  const rulesModal = rulesOpen ? (
+    <div className="rules-backdrop" role="presentation" onClick={() => setRulesOpen(false)}>
+      <section
+        className="rules-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rules-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button className="modal-close" type="button" aria-label="Close rules" onClick={() => setRulesOpen(false)}>
+          ×
+        </button>
+        <p className="mini-label">How to play</p>
+        <h2 id="rules-title">Red Rules</h2>
+        <div className="rules-grid">
+          <article>
+            <strong>Goal</strong>
+            <p>Have the lowest points when someone calls Red or the round ends.</p>
+          </article>
+          <article>
+            <strong>Card Values</strong>
+            <p>Kings are -2, Aces are 0, 2-10 are face value, and Jacks or Queens are 10.</p>
+          </article>
+          <article>
+            <strong>On Your Turn</strong>
+            <p>Draw from the deck or take the top discard. Keep it by swapping into your grid, or discard deck draws.</p>
+          </article>
+          <article>
+            <strong>Powers</strong>
+            <p>Deck-drawn 7 peeks, 8 blind-swaps two cards, and 9 peeks once before swapping two cards.</p>
+          </article>
+          <article>
+            <strong>Stacking</strong>
+            <p>If the discard rank matches one of your cards, stack it first to remove that card. Miss and you draw a penalty card.</p>
+          </article>
+          <article>
+            <strong>Calling Red</strong>
+            <p>After 5 turns, call Red. Everyone else gets one final turn, then lowest score wins.</p>
+          </article>
+        </div>
+      </section>
+    </div>
+  ) : null;
+
+  const quitConfirmModal = quitConfirmOpen ? (
+    <div className="rules-backdrop" role="presentation" onClick={() => setQuitConfirmOpen(false)}>
+      <section
+        className="confirm-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quit-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="mini-label">Quit game</p>
+        <h2 id="quit-title">Would you like to return to the main menu?</h2>
+        <div className="confirm-actions">
+          <button className="quit-button confirm-yes" type="button" onClick={reset}>
+            Yes
+          </button>
+          <button className="table-action-button" type="button" onClick={() => setQuitConfirmOpen(false)}>
+            No
+          </button>
+        </div>
+      </section>
+    </div>
+  ) : null;
 
   if (!game) {
     const setupFields = (
@@ -760,7 +875,7 @@ export default function Home() {
                 <span><strong>⇄</strong> Swap strategically</span>
                 <span><strong>♠</strong> Call Red at the right time</span>
               </div>
-              <button className="how-button" type="button">
+              <button className="how-button" type="button" onClick={() => setRulesOpen(true)}>
                 <span>▣</span>
                 How to Play
               </button>
@@ -791,6 +906,7 @@ export default function Home() {
               </button>
             </div>
           </section>
+          {rulesModal}
         </main>
       );
     }
@@ -857,6 +973,7 @@ export default function Home() {
             </>
           )}
         </section>
+        {rulesModal}
       </main>
     );
   }
@@ -865,43 +982,37 @@ export default function Home() {
     <main className="shell table-shell">
       {blunder && <div className="blunder-flash">{blunder.message}</div>}
       <header className="topbar">
-        <div>
+        <div className="table-brand">
+          <span className="brand-diamond" aria-hidden="true">♣</span>
           <h1>Red</h1>
         </div>
-        <div className="status-strip">
-          <span>{game.phase === "waiting" ? "Waiting for players" : game.phase === "initialPeek" ? `Peek: ${peekingPlayer?.name}` : `Turn: ${currentPlayer?.name}`}</span>
+        <div className="status-strip" aria-live="polite">
+          <span>{game.phase === "waiting" ? "Waiting for players" : game.phase === "initialPeek" ? `Peek: ${peekingPlayer?.name}` : game.redCallerId ? `${redCaller?.name ?? "Someone"} called Red` : `Turn: ${currentPlayer?.name}`}</span>
+        </div>
+        <div className="top-actions">
+          {currentPlayer && (
+            <button className="red-button call-red-action" disabled={game.phase !== "playing" || currentPlayer.turnsTaken < 5 || !!game.held || !!game.pendingPower || !!game.redCallerId || (roomCode ? assignedPlayerId !== currentPlayer.id : false)} onClick={callRed}>
+              Call Red
+            </button>
+          )}
+          <button className="table-action-button" type="button" onClick={() => setRulesOpen(true)}>
+            <span aria-hidden="true">▣</span>
+            Rules
+          </button>
+          <button className="quit-button" type="button" onClick={quitGame}>
+            Quit
+          </button>
         </div>
       </header>
 
       <section className="table-grid">
-        <aside className="side-panel">
-          {roomCode ? (
-            <div className="identity-card">
-              <p className="mini-label">You are</p>
-              <strong>{viewer?.name}</strong>
-              <span>Room {roomCode}</span>
-            </div>
-          ) : (
-            <label>
-              Viewing as
-              <select value={game.viewerId} onChange={(event) => setGame({ ...game, viewerId: event.target.value })}>
-                {game.players.map((player) => (
-                  <option key={player.id} value={player.id}>{player.name}</option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          {currentPlayer && (
-            <button className="red-button" disabled={game.phase !== "playing" || currentPlayer.turnsTaken < 5 || !!game.held || !!game.pendingPower || !!game.redCallerId || (roomCode ? assignedPlayerId !== currentPlayer.id : false)} onClick={callRed}>
-              Call Red
-            </button>
-          )}
-
-          <button className="ghost" onClick={reset}>
-            New game
-          </button>
-        </aside>
+        {redCaller && game.phase === "playing" && (
+          <div className="red-call-banner" role="status" aria-live="polite">
+            <span>Red called</span>
+            <strong>{redCaller.name}</strong>
+            <p>Everyone else gets one final turn.</p>
+          </div>
+        )}
 
         <section className="table-stage" aria-label="Card table">
           <div className="felt-table">
@@ -1005,7 +1116,7 @@ export default function Home() {
               "--player-deep": playerColor.deep,
             } as CSSProperties;
             return (
-            <article className={`player-card table-seat ${seatPosition(playerIndex, game.players.length, viewerIndex)} ${player.id === currentPlayer?.id && game.phase === "playing" ? "active-player" : ""} ${player.id === game.viewerId ? "viewer-seat" : ""} ${joinedPlayerIds.includes(player.id) ? "joined-seat" : "empty-seat"} ${peekingPlayer?.id === player.id ? "peeking-seat" : ""}`} key={player.id} style={playerStyle}>
+            <article className={`player-card table-seat ${seatPosition(playerIndex, game.players.length, viewerIndex)} ${player.id === currentPlayer?.id && game.phase === "playing" ? "active-player" : ""} ${player.id === game.viewerId ? "viewer-seat" : ""} ${joinedPlayerIds.includes(player.id) ? "joined-seat" : "empty-seat"} ${peekingPlayer?.id === player.id ? "peeking-seat" : ""} ${player.id === game.redCallerId ? "red-caller-seat" : ""}`} key={player.id} style={playerStyle}>
               <div className="player-head">
                 <div className="player-avatar" aria-hidden="true">{initials(player.name)}</div>
                 <h2>{player.name}</h2>
@@ -1067,24 +1178,42 @@ export default function Home() {
           </section>
         </section>
 
-        {(game.phase === "roundOver" || game.phase === "matchOver") && (
-          <aside className="side-panel log-panel results-only-panel">
-            <div className="result-panel">
-              <h2>{game.phase === "matchOver" ? "Match complete" : "Round complete"}</h2>
-              {game.players.map((player) => (
-                <p key={player.id}>
-                  {player.name}: {scoreBreakdown(player.slots)} = {player.roundScore} this round, {player.matchScore} total
-                </p>
-              ))}
-              {game.phase === "roundOver" ? (
-                <button className="primary" onClick={nextRound}>Deal next round</button>
-              ) : (
-                <button className="primary" onClick={reset}>Play again</button>
-              )}
-            </div>
-          </aside>
-        )}
       </section>
+      {rulesModal}
+      {quitConfirmModal}
+      {(game.phase === "roundOver" || game.phase === "matchOver") && (
+        <div className="rules-backdrop result-backdrop" role="presentation">
+          <section className="score-modal" role="dialog" aria-modal="true" aria-labelledby="score-title">
+            <p className="mini-label">{game.phase === "matchOver" ? "Game over" : "Round over"}</p>
+            <h2 id="score-title">{game.phase === "matchOver" ? "Final Scores" : `Round ${game.roundNumber} Scores`}</h2>
+            <div className="scoreboard-list">
+              {[...game.players]
+                .sort((a, b) => (a.matchScore - b.matchScore) || ((a.roundScore ?? 0) - (b.roundScore ?? 0)))
+                .map((player, index) => (
+                  <article className={index === 0 ? "winner-row" : ""} key={player.id}>
+                    <span>{index + 1}</span>
+                    <strong>{player.name}</strong>
+                    <p>{scoreBreakdown(player.slots)}</p>
+                    <b>{player.roundScore} round / {player.matchScore} total</b>
+                  </article>
+                ))}
+            </div>
+            {roomCode && (
+              <p className="ready-status">
+                {rematchReadyIds.length} / {rematchTargetIds.length} players ready
+              </p>
+            )}
+            <div className="result-actions">
+              <button className="primary" type="button" disabled={roomCode ? viewerReady : false} onClick={playAgain}>
+                {roomCode && viewerReady ? "Waiting for players" : "Play again"}
+              </button>
+              <button className="quit-button" type="button" onClick={quitGame}>
+                Quit
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
@@ -1160,14 +1289,15 @@ function initials(name: string) {
 function CardFace({ card, visible, compact, motion }: { card: Card; visible: boolean; compact: boolean; motion?: "drawn" | "swap" | "peek" | "discard" }) {
   const motionClass = motion ? `motion-${motion}` : "";
   if (!visible) {
-    return <div className={`card-face card-back ${motionClass} ${compact ? "compact-card" : ""}`} />;
+    return <div className={`card-face card-back ${motionClass} ${compact ? "compact-card" : ""}`}><span>Red</span></div>;
   }
 
   return (
     <div className={`card-face ${motionClass} ${isRed(card) ? "red-suit" : "black-suit"} ${compact ? "compact-card" : ""}`}>
-      <span>{card.rank}</span>
-      <small>{suitSymbol(card.suit)}</small>
-      <em>{cardValue(card)}</em>
+      <span className="card-corner card-corner-top">{card.rank}<small>{suitSymbol(card.suit)}</small></span>
+      <strong>{card.rank}</strong>
+      <small className="card-suit-center">{suitSymbol(card.suit)}</small>
+      <span className="card-corner card-corner-bottom">{card.rank}<small>{suitSymbol(card.suit)}</small></span>
     </div>
   );
 }
